@@ -16,6 +16,7 @@ import { toast } from 'react-toastify';
 import Cookies from 'js-cookie';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from 'src/libs/hooks/useUserStore';
+import { jwtDecode } from "jwt-decode";
 
 const CustomTextField = styled(TextField)({
   '& .MuiOutlinedInput-root': {
@@ -78,28 +79,41 @@ const SigninPopup = ({ open, onClose, onSwitchToSignup, onSwitchToForgotPassword
     setLoading(true);
 
     try {
-      if (isLoggedIn) {
-        logout();
-      }
-
       const response = await login(formData);
       
       if (response?.code === 200 && response.data) {
         const { accessToken, refreshToken } = response.data;
         
+        // Decode JWT để lấy scope
+        const decodedToken = jwtDecode(accessToken);
+        const userScope = decodedToken.scope; // Lấy scope từ JWT
+
         loginUser(accessToken, {
           refreshToken,
           email: formData.email,
+          role: userScope // Lưu scope như role
         });
         
         toast.success('Đăng nhập thành công!');
         onClose();
 
-        if (window.location.pathname === '/booking/tables') {
-          window.location.reload();
+        // Điều hướng dựa trên scope
+        switch(userScope) {
+          case 'STAFF':
+            navigate('/staff/booking-management');
+            break;
+          case 'CUSTOMER':
+            navigate('/');
+            break;
+          case 'ADMIN':
+            navigate('/admin/dashboard');
+            break;
+          case 'MANAGER':
+            navigate('/manager/managerDrinkCategory');
+            break;
+          default:
+            navigate('/');
         }
-      } else {
-        toast.error('Đăng nhập thất bại!');
       }
     } catch (error) {
       console.error('Login error:', error);

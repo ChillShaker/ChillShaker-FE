@@ -537,12 +537,12 @@ const BookingTable = () => {
   const getDefaultTime = () => {
     const currentHour = dayjs().hour();
     let nextHour = currentHour + 1;
-    
+
     // Nếu giờ tiếp theo < 10 hoặc > 23, set về 10 giờ sáng hôm sau
     if (nextHour < 10 || nextHour > 23) {
       nextHour = 10;
     }
-    
+
     return dayjs()
       .set('hour', nextHour)
       .set('minute', 0)
@@ -575,7 +575,7 @@ const BookingTable = () => {
     try {
       const cookies = document.cookie.split('; ');
       const userInfoCookie = cookies.find(cookie => cookie.trim().startsWith('userInfo='));
-      
+
       if (userInfoCookie) {
         const userInfoValue = decodeURIComponent(userInfoCookie.split('=')[1]);
         const userInfo = JSON.parse(userInfoValue);
@@ -635,46 +635,91 @@ const BookingTable = () => {
 
   // Xử lý WebSocket subscription
   const subscribeToUpdates = () => {
-    if (subscription) {
-      subscription.unsubscribe();
-    }
-
     const handleWebSocketMessage = (wsResponse) => {
-      if (wsResponse.code === 200 && wsResponse.data) {
-        const { id: tableId, statusEnum: newStatus, userEmail: ownerEmail } = wsResponse.data;
-
-        // Cập nhật trạng thái bàn
-        setTables(prevTables => 
-          prevTables.map(table => 
-            table.id === tableId 
-              ? { ...table, status: newStatus } 
-              : table
-          )
-        );
-
-        // Cập nhật thông tin người giữ bàn
-        if (newStatus === 'PENDING') {
-          setTableOwners(prev => ({
-            ...prev,
-            [tableId]: ownerEmail
-          }));
-        } else if (newStatus === 'EMPTY') {
-          setTableOwners(prev => {
-            const newOwners = { ...prev };
-            delete newOwners[tableId];
-            return newOwners;
-          });
+      console.log('WebSocket Message Received:', wsResponse);
+      
+      try {
+        if (!wsResponse || typeof wsResponse !== 'object') {
+          console.error('Invalid WebSocket response format');
+          return;
         }
+
+        const response = typeof wsResponse === 'string' ? JSON.parse(wsResponse) : wsResponse;
+        console.log('Parsed Response:', response);
+
+        if (response.code === 200 && response.data) {
+          // Trường hợp 1: Response từ booking status update
+          if (response.data.bookingCode) {
+            console.log('Processing booking update');
+            // Lấy thông tin bàn từ bookingTables
+            const bookingTableResponses = response.data.bookingTables;
+            
+            // Update status cho từng bàn trong booking
+            bookingTableResponses.forEach(bookingTable => {
+              const tableId = bookingTable.barTable.id;
+              const newStatus = bookingTable.barTable.status;
+              
+              setTables(prevTables =>
+                prevTables.map(table =>
+                  table.id === tableId
+                    ? { ...table, status: newStatus }
+                    : table
+                )
+              );
+            });
+          } 
+          // Trường hợp 2: Response từ table status update thông thường
+          else {
+            const { id: tableId, statusEnum: newStatus, userEmail: ownerEmail } = response.data;
+            console.log('Processing single table update:', {
+              tableId,
+              newStatus,
+              ownerEmail
+            });
+
+            setTables(prevTables =>
+              prevTables.map(table =>
+                table.id === tableId
+                  ? { ...table, status: newStatus }
+                  : table
+              )
+            );
+
+            // Cập nhật thông tin người giữ bàn
+            if (newStatus === 'PENDING') {
+              setTableOwners(prev => ({
+                ...prev,
+                [tableId]: ownerEmail
+              }));
+            } else if (newStatus === 'EMPTY') {
+              setTableOwners(prev => {
+                const newOwners = { ...prev };
+                delete newOwners[tableId];
+                return newOwners;
+              });
+            }
+          }
+        } else {
+          console.warn('Invalid response format or code:', response);
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
       }
     };
 
     // Đảm bảo truyền một function hợp lệ
-    const newSubscription = webSocketService.subscribeToBarTableStatus(handleWebSocketMessage);
-    
-    if (newSubscription) {
-      setSubscription(newSubscription);
+    if (webSocketService.isWebSocketConnected()) {
+      console.log('Subscribing to bar table status updates...');
+      const newSubscription = webSocketService.subscribeToBarTableStatus(handleWebSocketMessage);
+
+      if (newSubscription) {
+        console.log('Successfully subscribed to updates');
+        setSubscription(newSubscription);
+      } else {
+        console.error('Failed to subscribe to bar table status');
+      }
     } else {
-      console.error('Failed to subscribe to bar table status');
+      console.warn('WebSocket not connected, cannot subscribe');
     }
   };
 
@@ -683,7 +728,7 @@ const BookingTable = () => {
     try {
       setLoading(true);
       const formattedTime = formatTimeSlot(selectedTime);
-      
+
       const response = await getBarTableByDateAndTime(
         formatDateForApi(selectedDate),
         formatTimeForApi(formattedTime)
@@ -692,17 +737,19 @@ const BookingTable = () => {
       if (response.data?.code === 200) {
         setTables(response.data.data);
         setShowLayout(true);
-        
+
+        console.log('Connecting WebSocket...');
         // Đảm bảo WebSocket được kết nối trước khi subscribe
         connectWebSocket(() => {
+          console.log('WebSocket connected, subscribing to updates...');
           subscribeToUpdates();
         });
       }
     } catch (error) {
+      console.error('Error in handleViewTables:', error);
       setShowLayout(false);
       setTables([]);
       toast.error('Không thể tải dữ liệu bàn. Vui lòng thử lại!');
-      console.error('Error fetching tables:', error);
     } finally {
       setLoading(false);
     }
@@ -723,7 +770,7 @@ const BookingTable = () => {
     }
 
     const table = tables.find(t => t.id === tableId);
-    
+
     // Chỉ cho phép người giữ bàn có thể hủy
     if (table.status === 'PENDING' && tableOwners[tableId] !== userEmail) {
       toast.warning('Bàn này đang được người khác chọn');
@@ -733,8 +780,8 @@ const BookingTable = () => {
     const newStatus = table.status === 'PENDING' ? 'EMPTY' : 'PENDING';
 
     // Cập nhật UI ngay lập tức
-    setTables(prevTables => 
-      prevTables.map(t => 
+    setTables(prevTables =>
+      prevTables.map(t =>
         t.id === tableId ? { ...t, status: newStatus } : t
       )
     );
@@ -773,11 +820,11 @@ const BookingTable = () => {
     const interval = setInterval(() => {
       setCountdowns(prev => {
         const currentCount = prev[tableId];
-        
+
         if (currentCount <= 1) {
           clearInterval(interval);
           clearTableSelection(tableId);
-          
+
           // Reset trạng thái bàn về EMPTY
           webSocketService.sendBarTableStatusUpdateRequest({
             barTableId: tableId,
@@ -786,7 +833,7 @@ const BookingTable = () => {
             status: 'EMPTY',
             userEmail: userEmail
           });
-          
+
           return {
             ...prev,
             [tableId]: 0
@@ -812,7 +859,7 @@ const BookingTable = () => {
     if (countdownIntervals[tableId]) {
       clearInterval(countdownIntervals[tableId]);
     }
-    
+
     setCountdownIntervals(prev => {
       const newIntervals = { ...prev };
       delete newIntervals[tableId];
@@ -836,7 +883,7 @@ const BookingTable = () => {
   const renderCountdown = () => {
     // Chỉ hiển thị countdown cho các bàn user đang giữ
     const myPendingTableIds = Object.keys(myPendingTables);
-    
+
     if (myPendingTableIds.length === 0) return null;
 
     return (
@@ -907,8 +954,8 @@ const BookingTable = () => {
 
   // Thêm hàm mới để lấy danh sách bàn đang PENDING của user hiện tại
   const getMyPendingTables = () => {
-    return tables.filter(table => 
-      table.status === 'PENDING' && 
+    return tables.filter(table =>
+      table.status === 'PENDING' &&
       tableOwners[table.id] === userEmail
     );
   };
@@ -916,7 +963,7 @@ const BookingTable = () => {
   // Sửa lại hàm handleBookingWithDrinks
   const handleBookingWithDrinks = () => {
     const myPendingTablesList = getMyPendingTables();
-    
+
     if (!myPendingTablesList.length) {
       toast.warning('Vui lòng chọn bàn trước khi tiếp tục');
       return;
@@ -962,19 +1009,19 @@ const BookingTable = () => {
   const handleConfirmBooking = async (bookingData) => {
     try {
       const response = await bookingTableOnly(bookingData);
-      
+
       if (response.data?.code === 200) {
         // Lấy payment link từ response
         const paymentLink = response.data.data.paymentLink;
-        
+
         // Đóng popup
         setOpenConfirmPopup(false);
-        
+
         // Reset các trạng thái
         setSelectedTables([]);
-        setTables([]); 
+        setTables([]);
         setShowLayout(false);
-        
+
         // Cleanup các countdown
         Object.keys(countdownIntervals).forEach(tableId => {
           clearInterval(countdownIntervals[tableId]);
@@ -989,7 +1036,7 @@ const BookingTable = () => {
         } else {
           toast.error('Không tìm thấy link thanh toán!');
         }
-        
+
       } else {
         toast.error('Đặt bàn thất bại. Vui lòng thử lại!');
       }
@@ -1014,6 +1061,27 @@ const BookingTable = () => {
       }
     });
   };
+
+  useEffect(() => {
+    // Lắng nghe cập nhật trạng thái bàn từ lính gác
+    const handleTableUpdate = (event) => {
+      const { id: tableId, statusEnum: newStatus } = event.detail;
+      
+      setTables(prevTables =>
+        prevTables.map(table =>
+          table.id === tableId
+            ? { ...table, status: newStatus }
+            : table
+        )
+      );
+    };
+
+    window.addEventListener('tableStatusUpdated', handleTableUpdate);
+
+    return () => {
+      window.removeEventListener('tableStatusUpdated', handleTableUpdate);
+    };
+  }, []);
 
   return (
     <Container maxWidth="lg" sx={{ py: 6 }}>

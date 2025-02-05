@@ -16,7 +16,10 @@ import BookingInfoPage from './pages/booking-info-page/BookingInfoPage'
 import BookingDrink from './pages/booking-page/components/BookingDrink'
 import BookingPayment from './pages/booking-page/components/BookingPayment'
 import BookingMenu from './pages/booking-page/components/BookingMenu'
-
+import BookingManagementPage from './pages/staff-pages/booking-management-page/BookingManagementPage'
+import ProtectedStaffRoute from './components/protected-routes/ProtectedStaffRoute'
+import StaffLayout from './components/staff-components/StaffLayout'
+import BookingInfoPageForStaff from './pages/staff-pages/booking-info-page/BookingInfoPageForStaff'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
@@ -34,6 +37,13 @@ createRoot(document.getElementById('root')).render(
             <Route path="payment-error" element={<PaymentError />} />
             <Route path="my-profile" element={<MyProfilePage />} />
             <Route path="booking-info/:id" element={<BookingInfoPage />} />
+          </Route>
+        </Route>
+
+        <Route element={<ProtectedStaffRoute />}>
+          <Route path="/staff" element={<StaffLayout />}>
+            <Route path="booking-management" element={<BookingManagementPage />} />
+            <Route path="booking-info/:id" element={<BookingInfoPageForStaff />} />
           </Route>
         </Route>
 

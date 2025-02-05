@@ -79,6 +79,18 @@ const formatTime = (timeString) => {
   }
 };
 
+// Cập nhật hàm formatDateTime để xử lý LocalDateTime
+const formatDateTime = (dateTimeString) => {
+  try {
+    if (!dateTimeString) return 'N/A';
+    const date = new Date(dateTimeString);
+    return `${format(date, 'dd/MM/yyyy')} ${format(date, 'HH:mm')}`;
+  } catch (error) {
+    console.error('Invalid date time:', dateTimeString);
+    return 'N/A';
+  }
+};
+
 const BookingInfoPage = () => {
   const { id } = useParams();
   const [bookingInfo, setBookingInfo] = useState(null);
@@ -274,7 +286,7 @@ const BookingInfoPage = () => {
               <InfoItem>
                 <TimerIcon />
                 <Typography>
-                  Hết hạn: {formatDate(bookingInfo.expireAt)} {formatTime(bookingInfo.expireAt)}
+                  Hết hạn: {formatDateTime(bookingInfo.expireAt)}
                 </Typography>
               </InfoItem>
             )}

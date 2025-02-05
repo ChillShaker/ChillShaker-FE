@@ -16,21 +16,26 @@ const useAuthStore = create((set, get) => ({
   })(),
 
   login: (token, userInfo) => {
-    // Xóa tất cả cookies và session storage hiện tại
+    // Xóa cookies cũ
     Object.keys(Cookies.get()).forEach(cookieName => {
       Cookies.remove(cookieName);
     });
     sessionStorage.clear();
     
-    // Set cookies mới
+    // Set cookies mới với role
     Cookies.set('token', token, { expires: 1 });
-    Cookies.set('userInfo', JSON.stringify(userInfo), { expires: 1 });
+    Cookies.set('userInfo', JSON.stringify({
+      ...userInfo,
+      role: userInfo.role // Đảm bảo lưu role
+    }), { expires: 1 });
 
-    // Update state
     set({
       isLoggedIn: true,
       token,
-      userInfo
+      userInfo: {
+        ...userInfo,
+        role: userInfo.role
+      }
     });
 
     // Trigger storage event để sync across tabs
